@@ -137,6 +137,17 @@ nav button[aria-selected=true]{color:var(--red)}
 .sheetfoot .btn{flex:1}
 #toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:10px;z-index:2000;font-weight:600;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90%}
 #toast.show{opacity:1}
+.helpbtn{width:34px;height:34px;padding:0;font-size:16px;flex:none}
+#help{position:fixed;inset:0;z-index:2500;background:var(--bg);overflow:auto;-webkit-overflow-scrolling:touch;
+  padding:calc(12px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) calc(24px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+#help .top{display:flex;justify-content:space-between;align-items:center;gap:10px;position:sticky;top:-12px;background:var(--bg);padding:6px 0;z-index:1}
+#help h1{margin:0;font-size:20px}
+#help h2{font-size:16px;margin:18px 0 6px}
+#help ol,#help ul{margin:0;padding-left:22px} #help li{margin:5px 0}
+#help .tabs{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+#help .tabs a{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:6px 12px;font-size:13px;color:var(--fg);text-decoration:none}
+#help .note{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:8px 0;font-size:14px}
+#help i.c{display:inline-block;width:11px;height:11px;border-radius:50%;vertical-align:-1px;margin-right:4px}
 #confirm{position:fixed;inset:0;background:#0007;z-index:3000;display:grid;place-items:center;padding:20px}
 #confirm .card{max-width:360px}
 </style>
@@ -146,6 +157,7 @@ nav button[aria-selected=true]{color:var(--red)}
   <span class="dot"></span>
   <div class="txt"><b id="gpsT">GPS inactif</b><small id="gpsS">Touchez « Activer » pour vous localiser</small></div>
   <button class="chipbtn" id="gpsBtn">Activer</button>
+  <button class="chipbtn helpbtn" id="helpBtn" aria-label="Mode d'emploi" title="Mode d'emploi">?</button>
 </div>
 <div id="kpi">
   <div><b id="kAddr">0/0</b><span>Adresses</span></div>
@@ -224,6 +236,61 @@ nav button[aria-selected=true]{color:var(--red)}
   </div>
 </div>
 <div id="toast"></div>
+<div id="help" hidden role="dialog" aria-modal="true" aria-labelledby="hlpT">
+  <div class="top"><h1 id="hlpT">Mode d'emploi</h1><button class="btn primary" id="helpClose">Fermer</button></div>
+  <div class="tabs"><a href="#h-start">Démarrer</a><a href="#h-map">Carte</a><a href="#h-fiche">Fiche</a><a href="#h-sync">Synchroniser</a><a href="#h-orga">Organisation</a></div>
+
+  <h2 id="h-start">1. Démarrer</h2>
+  <ol>
+    <li>Installez l'appli : menu ⋮ (ou Partager sur iPhone) → <b>Ajouter à l'écran d'accueil</b>.</li>
+    <li>Touchez <b>Activer</b> en haut et autorisez la localisation.</li>
+    <li>Le bandeau devient <b>vert</b> dans le secteur 220, <b>rouge</b> dehors (le téléphone vibre quand vous sortez). Il indique la distance jusqu'à la limite.</li>
+    <li>Onglet <b>Bilan</b> : saisissez le nombre de <b>calendriers reçus</b> pour suivre le stock.</li>
+  </ol>
+  <div class="note">Tout fonctionne sans réseau. Les saisies restent sur ce téléphone, même si vous fermez l'appli.</div>
+
+  <h2 id="h-map">2. La carte</h2>
+  <ul>
+    <li><b>Touchez un point</b> (ou juste à côté) pour ouvrir sa fiche. Zoomez pour séparer les points serrés.</li>
+    <li>Couleurs : <i class="c" style="background:#8a8380"></i>à faire · <i class="c" style="background:#1f8a4c"></i>fait · <i class="c" style="background:#d97706"></i>repasser · <i class="c" style="background:#2563eb"></i>immeuble en cours · <i class="c" style="background:#c0262d"></i>refus · <i class="c" style="background:#7c3aed"></i>inaccessible.</li>
+    <li>Les gros points sont des immeubles ou résidences (plusieurs logements).</li>
+    <li>◎ recentre sur vous · ⌖ ouvre l'adresse non faite la plus proche · ＋ ajoute un point oublié à votre position · 🗺 affiche le fond de carte détaillé (réseau nécessaire).</li>
+    <li>Onglet <b>Adresses</b> : la liste par zone et par rue, avec les filtres « À faire », « À repasser », « Près de moi ».</li>
+  </ul>
+
+  <h2 id="h-fiche">3. La fiche adresse</h2>
+  <ul>
+    <li><b>✓ Fait</b> : pour une maison, compte 1 calendrier et ferme la fiche. Ajoutez le montant avec +5, +10… et le mode de paiement.</li>
+    <li><b>Absent · repasser</b> : laissez un avis de passage, l'adresse passe en orange.</li>
+    <li><b>Immeuble</b> : utilisez « Logements faits » (ex. 3 / 12). Il passe en vert quand tout est fait.</li>
+    <li><b>Note</b> : n° réel si « bât. sans n° », code portail, horaire pour repasser…</li>
+    <li>Erreur ? <b>Remettre à faire</b> efface la saisie de l'adresse.</li>
+  </ul>
+
+  <h2 id="h-sync">4. Synchroniser avec le binôme</h2>
+  <div class="note">Chaque téléphone garde son propre suivi. Pour avoir les mêmes infos sur les deux, on s'échange un code. À faire à chaque fin de tournée, ou dès que vous vous séparez.</div>
+  <ol>
+    <li><b>Téléphone A</b> : onglet <b>Bilan & binôme</b> → <b>Envoyer mon suivi</b>.</li>
+    <li>Choisissez WhatsApp ou SMS et envoyez le message au binôme (il contient un code qui commence par <code>S220:</code>).</li>
+    <li><b>Téléphone B</b> : copiez tout le message reçu (appui long → Copier).</li>
+    <li>Dans l'appli : <b>Bilan & binôme</b> → collez dans la case « Collez ici le code reçu » → <b>Fusionner le code collé</b>.</li>
+    <li>Faites ensuite l'inverse (B envoie, A fusionne) : les deux téléphones sont identiques.</li>
+  </ol>
+  <ul>
+    <li>Pour chaque adresse, la saisie la plus récente gagne. Rien n'est effacé.</li>
+    <li>Vous pouvez fusionner plusieurs fois le même code sans risque.</li>
+    <li>Si « Envoyer » ne propose pas WhatsApp, le code est copié : collez-le dans un message.</li>
+  </ul>
+
+  <h2 id="h-orga">5. Organisation conseillée</h2>
+  <ul>
+    <li>Une zone par sortie (1 h 30 à 2 h), de la zone 1 à la zone 5. La liste suit les rues dans l'ordre des numéros.</li>
+    <li>Un trottoir chacun dans les rues (pairs / impairs), ensemble dans les résidences.</li>
+    <li>Meilleurs créneaux : samedi 10 h–12 h, semaine 17 h 30–19 h 30.</li>
+    <li>En fin de tournée : filtre « À repasser », puis synchronisation et contrôle caisse = total du Bilan.</li>
+  </ul>
+  <p style="margin-top:20px"><button class="btn block primary" id="helpClose2">C'est parti</button></p>
+</div>
 <div id="confirm" hidden><div class="card"><h2 id="cfT"></h2><p class="muted" id="cfP"></p>
   <div class="sheetfoot"><button class="btn" id="cfNo">Annuler</button><button class="btn primary" id="cfYes">Confirmer</button></div></div></div>
 
@@ -273,7 +340,7 @@ const placed=[];D.roads.filter(r=>r.n&&r.k!=='rail').forEach(r=>{const m=r.p[Mat
 function lblToggle(){map.getZoom()>=17?lblLayer.addTo(map):lblLayer.remove();stops().forEach(p=>mk[p.id]&&drawStop(p))} map.on('zoomend',lblToggle);lblToggle();
 function drawStop(p){const st=status(p);const big=map.getZoom()>=17;const o={renderer:cv,radius:big?(p.lg>3?8:5.5):(p.lg>3?5:3.5),weight:big?2:1,color:'#fff',fillColor:COL[st],fillOpacity:1};
   if(mk[p.id]){mk[p.id].setStyle(o);return}
-  mk[p.id]=L.circleMarker([p.la,p.lo],o).addTo(map).on('click',()=>openSheet(p.id));}
+  mk[p.id]=L.circleMarker([p.la,p.lo],Object.assign(o,{interactive:false})).addTo(map);}
 stops().forEach(drawStop);
 $('#bTiles').onclick=()=>{if(tiles){tiles.remove();tiles=null;$('#bTiles').classList.remove('on')}else{
   tiles=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:20,maxNativeZoom:19,attribution:'© OpenStreetMap',opacity:.85}).addTo(map);tiles.bringToBack();$('#bTiles').classList.add('on')}};
@@ -341,7 +408,10 @@ $('#iName').onchange=e=>{cur.s=e.target.value||'Point ajouté';cur.t=Date.now();
 $('#shReset').onclick=()=>{delete S.v[cur.id];S.v[cur.id]={t:Date.now(),by:S.dev};save();drawStop(cur);fillSheet();kpi()};
 function closeSheet(){$('#sheet').classList.remove('open');cur=null;if(!$('#vList').hidden)renderList();if(!$('#vStats').hidden)renderStats()}
 $('#shClose').onclick=closeSheet;
-map.on('click',()=>{if(cur)closeSheet()});
+// un appui sur la carte ouvre le point le plus proche (zone d'appui large, adaptée au doigt)
+map.on('click',e=>{const c=e.containerPoint;let best=null,bd=32;
+  stops().forEach(p=>{const d=map.latLngToContainerPoint([p.la,p.lo]).distanceTo(c);if(d<bd){bd=d;best=p}});
+  if(best)openSheet(best.id);else if(cur)closeSheet()});
 
 /* ---------- compteurs ---------- */
 function totals(list){let a=0,ad=0,lg=0,lf=0,cal=0,eur=0,esp=0,chq=0,cb=0,again=0;
@@ -394,7 +464,8 @@ function renderStats(){const t=totals(stops());
     <p class="muted">Chacun note sur son téléphone. Pour fusionner : l'un envoie son code (WhatsApp, SMS…), l'autre le colle ici. La saisie la plus récente gagne, rien n'est perdu.</p>
     <div class="stack"><button class="btn primary block" id="bExp">Envoyer mon suivi</button>
     <textarea id="iImp" placeholder="Collez ici le code reçu du binôme"></textarea>
-    <button class="btn block" id="bImp">Fusionner le code collé</button></div></div>
+    <button class="btn block" id="bImp">Fusionner le code collé</button>
+    <button class="btn block" id="bHowSync">Comment synchroniser ? (pas à pas)</button></div></div>
   <div class="card"><h2>Organisation conseillée</h2><ol class="tips">
     <li>Une zone par sortie (1 h 30 à 2 h). Faites les zones 1 à 5 dans l'ordre, la liste suit les rues dans le sens de la numérotation.</li>
     <li>Meilleurs créneaux : samedi 10 h–12 h et en semaine 17 h 30–19 h 30.</li>
@@ -405,7 +476,7 @@ function renderStats(){const t=totals(stops());
   <div class="card"><h2>Données</h2><p class="muted">Adresses : Base Adresse Nationale. Bâtiments et nombre de logements : IGN BD TOPO (fichiers fonciers). Rues : OpenStreetMap. Contour reporté depuis la fiche secteur, précision ≈ 10 m. Les « bât. sans n° » sont des maisons sans adresse officielle : notez le n° vu sur place dans la note.</p>
   <button class="btn block" id="bWipe">Tout effacer sur ce téléphone</button></div>`;
   $('#iRecu').onchange=e=>{S.recu=parseInt(e.target.value)||0;save();kpi();renderStats()};
-  $('#bExp').onclick=exportCode;$('#bImp').onclick=importCode;
+  $('#bExp').onclick=exportCode;$('#bImp').onclick=importCode;$('#bHowSync').onclick=()=>showHelp('h-sync');
   $('#bWipe').onclick=()=>ask('Tout effacer ?','Le suivi de ce téléphone sera supprimé. Envoyez d\'abord votre suivi au binôme si besoin.',()=>{S.v={};S.extra=[];S.recu=0;save();Object.values(mk).forEach(m=>m.remove());for(const k in mk)delete mk[k];stops().forEach(drawStop);kpi();renderStats()});}
 function b64(s){return btoa(unescape(encodeURIComponent(s)))} function ub64(s){return decodeURIComponent(escape(atob(s)))}
 async function exportCode(){const code='S220:'+b64(JSON.stringify({v:S.v,extra:S.extra,recu:S.recu}));
@@ -423,6 +494,11 @@ let tt;function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('sh
 function ask(t,p,yes){$('#cfT').textContent=t;$('#cfP').textContent=p;$('#confirm').hidden=false;$('#cfNo').onclick=()=>$('#confirm').hidden=true;$('#cfYes').onclick=()=>{$('#confirm').hidden=true;yes()}}
 $$('nav button').forEach(b=>b.onclick=()=>{$$('nav button').forEach(x=>x.setAttribute('aria-selected',x===b));$$('.view').forEach(v=>v.hidden=v.id!==b.dataset.v);
   if(b.dataset.v==='vMap')map.invalidateSize();if(b.dataset.v==='vList')renderList();if(b.dataset.v==='vStats')renderStats()});
+function showHelp(sec){$('#help').hidden=false;const t=sec&&document.getElementById(sec);$('#help').scrollTop=t?t.offsetTop-60:0}
+function hideHelp(){$('#help').hidden=true;try{localStorage.setItem(KEY+'help','1')}catch(e){}}
+$('#helpBtn').onclick=()=>showHelp();$('#helpClose').onclick=hideHelp;$('#helpClose2').onclick=hideHelp;
+$$('#help .tabs a').forEach(a=>a.onclick=e=>{e.preventDefault();showHelp(a.getAttribute('href').slice(1))});
+try{if(!localStorage.getItem(KEY+'help'))showHelp()}catch(e){}
 kpi();
 if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{});
 })();
