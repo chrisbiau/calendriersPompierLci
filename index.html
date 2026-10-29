@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#b3261e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Tournée Secteur 220</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+/* Layout : appli plein écran, barre d'état GPS en haut, contenu, onglets en bas (pouce) */
+:root{
+  --bg:#f6f4f2; --panel:#ffffff; --fg:#1d1b1a; --muted:#6b6461; --line:#e2dcd8;
+  --red:#b3261e; --red-ink:#ffffff;
+  --ok:#1f8a4c; --warn:#d97706; --bad:#c0262d; --skip:#7c3aed; --part:#2563eb; --todo:#8a8380;
+  --in-bg:#e3f4ea; --in-fg:#14532d; --out-bg:#c0262d; --out-fg:#fff;
+  --font:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#141211; --panel:#1f1c1b; --fg:#f2eeeb; --muted:#a39b97; --line:#34302e;
+  --in-bg:#123222; --in-fg:#b7f0cd; color-scheme:dark}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font:15px/1.4 var(--font);display:flex;flex-direction:column;overflow:hidden;
+  padding-top:env(safe-area-inset-top,0px)}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--part);outline-offset:2px}
+
+/* Barre GPS */
+#gps{display:flex;align-items:center;gap:10px;padding:8px max(12px,env(safe-area-inset-right,0px)) 8px max(12px,env(safe-area-inset-left,0px));
+  background:var(--panel);border-bottom:1px solid var(--line);min-height:52px}
+#gps .dot{width:14px;height:14px;border-radius:50%;background:var(--todo);flex:none}
+#gps .txt{flex:1;min-width:0}
+#gps b{display:block;font-size:15px;letter-spacing:.02em}
+#gps small{color:var(--muted);font-size:12px}
+#gps.in{background:var(--in-bg);color:var(--in-fg)} #gps.in .dot{background:var(--ok)} #gps.in small{color:inherit;opacity:.8}
+#gps.out{background:var(--out-bg);color:var(--out-fg)} #gps.out .dot{background:#fff;animation:blink 1s infinite} #gps.out small{color:inherit;opacity:.9}
+@keyframes blink{50%{opacity:.2}}
+@media (prefers-reduced-motion:reduce){#gps.out .dot{animation:none}}
+.chipbtn{border:1px solid currentColor;background:transparent;border-radius:999px;padding:6px 12px;font-size:13px;font-weight:600;white-space:nowrap}
+
+/* Compteurs */
+#kpi{display:grid;grid-template-columns:repeat(4,1fr);background:var(--panel);border-bottom:1px solid var(--line)}
+#kpi div{padding:6px 4px;text-align:center;border-right:1px solid var(--line)}
+#kpi div:last-child{border-right:0}
+#kpi b{display:block;font-size:17px;font-variant-numeric:tabular-nums}
+#kpi span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+
+main{flex:1;position:relative;min-height:0}
+.view{position:absolute;inset:0;overflow:auto;-webkit-overflow-scrolling:touch}
+.view[hidden]{display:none!important}
+#map{position:absolute;inset:0;background:var(--bg)}
+.leaflet-container{font:inherit;background:var(--bg)}
+.mapbtns{position:absolute;right:max(10px,env(safe-area-inset-right,0px));bottom:12px;z-index:500;display:flex;flex-direction:column;gap:8px}
+.fab{width:48px;height:48px;border-radius:14px;border:1px solid var(--line);background:var(--panel);font-size:20px;box-shadow:0 2px 8px #0003;display:grid;place-items:center}
+.fab.on{background:var(--red);color:var(--red-ink);border-color:var(--red)}
+.lbl{font-size:11px;font-weight:700;color:#1e3a8a;transform-origin:0 0;margin:-7px 0 0 -40px;white-space:nowrap;text-shadow:0 0 3px #fff,0 0 3px #fff;pointer-events:none}
+.legend{position:absolute;left:max(10px,env(safe-area-inset-left,0px));bottom:12px;z-index:500;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px 8px;font-size:11px;display:grid;grid-template-columns:auto auto;gap:2px 10px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:-1px}
+
+/* Liste */
+.pad{padding:12px max(12px,env(safe-area-inset-right,0px)) 90px max(12px,env(safe-area-inset-left,0px))}
+.filters{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.filters button{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:7px 12px;font-size:13px}
+.filters button[aria-pressed=true]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.row2{display:flex;gap:8px;margin-bottom:10px}
+.row2 select,.row2 input{flex:1;min-width:0;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+h3.street{position:sticky;top:0;z-index:2;background:var(--bg);margin:14px 0 4px;padding:6px 0;font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);display:flex;justify-content:space-between;gap:8px}
+h2.zone{margin:18px 0 0;font-size:18px}
+h2.zone small{font-weight:400;color:var(--muted);font-size:13px}
+.item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:6px 0;min-height:52px}
+.item .d{width:14px;height:14px;border-radius:50%;flex:none;background:var(--todo)}
+.item .m{flex:1;min-width:0}
+.item .m b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .m small{color:var(--muted);font-size:12px}
+.item .r{text-align:right;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.item .r b{color:var(--fg);font-size:14px}
+.item.st-done{opacity:.6}
+
+/* Bilan */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+.card h2{margin:0 0 10px;font-size:16px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat b{display:block;font-size:22px;font-variant-numeric:tabular-nums}
+.stat span{color:var(--muted);font-size:12px}
+table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+td,th{padding:6px 4px;border-bottom:1px solid var(--line);text-align:right}
+td:first-child,th:first-child{text-align:left}
+.bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:3px}
+.bar i{display:block;height:100%;background:var(--ok)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);background:var(--panel);border-radius:12px;padding:11px 14px;font-weight:600;min-height:46px}
+.btn.primary{background:var(--red);color:var(--red-ink);border-color:var(--red)}
+.btn.block{width:100%}
+.stack{display:flex;flex-direction:column;gap:8px}
+textarea{width:100%;border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:10px;min-height:70px}
+.muted{color:var(--muted);font-size:13px}
+ol.tips{margin:0;padding-left:20px} ol.tips li{margin:4px 0}
+
+/* Onglets */
+nav{display:grid;grid-template-columns:repeat(3,1fr);background:var(--panel);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+nav button{border:0;background:transparent;padding:10px 0 8px;font-size:12px;font-weight:600;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:2px}
+nav button svg{width:22px;height:22px}
+nav button[aria-selected=true]{color:var(--red)}
+
+/* Fiche adresse (bottom sheet) */
+#sheet{position:fixed;left:0;right:0;bottom:0;z-index:1000;background:var(--panel);border-radius:18px 18px 0 0;box-shadow:0 -6px 24px #0004;
+  max-height:88%;overflow:auto;padding:8px max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));transform:translateY(105%);transition:transform .2s}
+#sheet.open{transform:none}
+@media (prefers-reduced-motion:reduce){#sheet{transition:none}}
+#sheet .grab{width:40px;height:5px;border-radius:3px;background:var(--line);margin:0 auto 8px}
+#sheet h2{margin:0;font-size:20px}
+#sheet .sub{color:var(--muted);font-size:13px;margin:2px 0 12px}
+.stbtns{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px}
+.stbtns button{border:2px solid var(--line);background:var(--bg);border-radius:12px;padding:12px 6px;font-weight:700;min-height:52px}
+.stbtns button[aria-pressed=true]{color:#fff}
+.stbtns [data-st=done][aria-pressed=true]{background:var(--ok);border-color:var(--ok)}
+.stbtns [data-st=absent][aria-pressed=true]{background:var(--warn);border-color:var(--warn)}
+.stbtns [data-st=refus][aria-pressed=true]{background:var(--bad);border-color:var(--bad)}
+.stbtns [data-st=skip][aria-pressed=true]{background:var(--skip);border-color:var(--skip)}
+.field{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid var(--line)}
+.field label{font-weight:600}
+.step{display:flex;align-items:center;gap:6px}
+.step button{width:44px;height:44px;border-radius:12px;border:1px solid var(--line);background:var(--bg);font-size:20px;font-weight:700}
+.step output,.step input{min-width:56px;width:72px;text-align:center;font-size:18px;font-weight:700;font-variant-numeric:tabular-nums;border:1px solid var(--line);border-radius:10px;padding:8px 4px;background:var(--bg)}
+.quick{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.quick button{border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:8px 10px;font-weight:600}
+.seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{border:0;background:var(--bg);padding:9px 12px;font-weight:600}
+.seg button[aria-pressed=true]{background:var(--fg);color:var(--bg)}
+.sheetfoot{display:flex;gap:8px;margin-top:12px}
+.sheetfoot .btn{flex:1}
+#toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:10px;z-index:2000;font-weight:600;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90%}
+#toast.show{opacity:1}
+#confirm{position:fixed;inset:0;background:#0007;z-index:3000;display:grid;place-items:center;padding:20px}
+#confirm .card{max-width:360px}
+</style>
+</head>
+<body>
+<div id="gps" role="status" aria-live="polite">
+  <span class="dot"></span>
+  <div class="txt"><b id="gpsT">GPS inactif</b><small id="gpsS">Touchez « Activer » pour vous localiser</small></div>
+  <button class="chipbtn" id="gpsBtn">Activer</button>
+</div>
+<div id="kpi">
+  <div><b id="kAddr">0/0</b><span>Adresses</span></div>
+  <div><b id="kLog">0</b><span>Logements</span></div>
+  <div><b id="kCal">0</b><span>Calendriers</span></div>
+  <div><b id="kEur">0 €</b><span>Collecté</span></div>
+</div>
+<main>
+  <section class="view" id="vMap">
+    <div id="map"></div>
+    <div class="legend" aria-label="Légende">
+      <span><i style="background:var(--todo)"></i>À faire</span><span><i style="background:var(--ok)"></i>Fait</span>
+      <span><i style="background:var(--warn)"></i>Repasser</span><span><i style="background:var(--part)"></i>Immeuble en cours</span>
+      <span><i style="background:var(--bad)"></i>Refus</span><span><i style="background:var(--skip)"></i>Inaccessible</span>
+    </div>
+    <div class="mapbtns">
+      <button class="fab" id="bLocate" title="Centrer sur moi" aria-label="Centrer sur moi">◎</button>
+      <button class="fab" id="bNear" title="Adresse la plus proche" aria-label="Ouvrir l'adresse la plus proche">⌖</button>
+      <button class="fab" id="bAdd" title="Ajouter un point ici" aria-label="Ajouter un point">＋</button>
+      <button class="fab" id="bTiles" title="Fond de carte en ligne" aria-label="Fond de carte détaillé (en ligne)">🗺</button>
+    </div>
+  </section>
+  <section class="view" id="vList" hidden>
+    <div class="pad">
+      <div class="filters" id="fSt">
+        <button data-f="todo" aria-pressed="true">À faire</button>
+        <button data-f="again">À repasser</button>
+        <button data-f="near">Près de moi</button>
+        <button data-f="done">Faits</button>
+        <button data-f="all">Tout</button>
+      </div>
+      <div class="row2">
+        <select id="fZone" aria-label="Zone"></select>
+        <input id="fQ" type="search" placeholder="Rue, n°, résidence…" aria-label="Rechercher">
+      </div>
+      <div id="list"></div>
+    </div>
+  </section>
+  <section class="view" id="vStats" hidden>
+    <div class="pad" id="stats"></div>
+  </section>
+</main>
+<nav role="tablist">
+  <button role="tab" data-v="vMap" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/></svg>Carte</button>
+  <button role="tab" data-v="vList" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Adresses</button>
+  <button role="tab" data-v="vStats" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Bilan & binôme</button>
+</nav>
+
+<div id="sheet" role="dialog" aria-modal="false" aria-labelledby="shT">
+  <div class="grab"></div>
+  <h2 id="shT"></h2>
+  <div class="sub" id="shS"></div>
+  <div class="stbtns">
+    <button data-st="done">✓ Fait</button>
+    <button data-st="absent">Absent · repasser</button>
+    <button data-st="refus">Refus</button>
+    <button data-st="skip">Inaccessible / vacant</button>
+  </div>
+  <div class="field" id="fldLog"><label>Logements faits</label>
+    <div class="step"><button data-inc="lf" data-d="-1">−</button><output id="oLf">0</output><button data-inc="lf" data-d="1">+</button></div></div>
+  <div class="field"><label>Calendriers donnés</label>
+    <div class="step"><button data-inc="cal" data-d="-1">−</button><output id="oCal">0</output><button data-inc="cal" data-d="1">+</button></div></div>
+  <div class="field"><label for="iEur">Montant (€)</label>
+    <div class="step"><input id="iEur" type="number" inputmode="decimal" min="0" step="1"></div></div>
+  <div class="field" style="border-top:0;padding-top:0"><span></span>
+    <div class="quick"><button data-add="5">+5</button><button data-add="10">+10</button><button data-add="15">+15</button><button data-add="20">+20</button></div></div>
+  <div class="field"><label>Paiement</label>
+    <div class="seg" id="segPay"><button data-p="esp">Espèces</button><button data-p="chq">Chèque</button><button data-p="cb">CB/Autre</button></div></div>
+  <div class="field" style="display:block"><label for="iNote">Note</label>
+    <textarea id="iNote" placeholder="Ex. repasser après 18 h, code portail, chien…"></textarea></div>
+  <div class="field" id="fldName" style="display:block" hidden><label for="iName">Nom du point</label>
+    <input id="iName" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg)"></div>
+  <div class="sheetfoot">
+    <button class="btn" id="shReset">Remettre à faire</button>
+    <button class="btn primary" id="shClose">OK</button>
+  </div>
+</div>
+<div id="toast"></div>
+<div id="confirm" hidden><div class="card"><h2 id="cfT"></h2><p class="muted" id="cfP"></p>
+  <div class="sheetfoot"><button class="btn" id="cfNo">Annuler</button><button class="btn primary" id="cfYes">Confirmer</button></div></div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="data.js"></script>
+<script>
+(function(){
+const D=window.DATA, KEY='secteur220-v1';
+const ZN={1:'Zone 1 · Nord (Bagnols, Mas de la Mer)',2:'Zone 2 · Ouest (Bastide, Gache)',3:'Zone 3 · Centre (Espanet, Citharista)',4:'Zone 4 · Est (Fontsainte)',5:'Zone 5 · Sud (Saint-Jean, Hôtel)'};
+const COL={todo:'#8a8380',done:'#1f8a4c',absent:'#d97706',refus:'#c0262d',skip:'#7c3aed',part:'#2563eb'};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+
+/* ---------- état local ---------- */
+let S={v:{},extra:[],recu:0,dev:Math.random().toString(36).slice(2,7)};
+try{const j=JSON.parse(localStorage.getItem(KEY)); if(j) S=Object.assign(S,j);}catch(e){}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){toast('Stockage impossible sur ce navigateur')}}
+const stops=()=>D.stops.concat(S.extra);
+const rec=id=>S.v[id]||{};
+function status(p){const r=rec(p.id);return r.st||((r.lf||0)>0?'part':'todo')}
+const label=p=>p.n?(p.n+' '+p.s):(p.s+(p.ex?'':' · bât. sans n°'));
+const fmtE=n=>(Math.round(n*100)/100).toLocaleString('fr-FR')+' €';
+
+/* ---------- géométrie ---------- */
+const POLY=D.sector; const K=Math.cos(43.19*Math.PI/180);
+function inside(la,lo){let c=false;for(let i=0,j=POLY.length-1;i<POLY.length;j=i++){const a=POLY[i],b=POLY[j];
+  if((a[0]>la)!==(b[0]>la)&&lo<(b[1]-a[1])*(la-a[0])/(b[0]-a[0])+a[1])c=!c;}return c;}
+function xy(la,lo){return [lo*K*111320,la*111320]}
+function edgeDist(la,lo){const p=xy(la,lo);let m=1e9;for(let i=0,j=POLY.length-1;i<POLY.length;j=i++){
+  const a=xy(...POLY[j]),b=xy(...POLY[i]);const dx=b[0]-a[0],dy=b[1]-a[1];let t=((p[0]-a[0])*dx+(p[1]-a[1])*dy)/(dx*dx+dy*dy);t=Math.max(0,Math.min(1,t));
+  m=Math.min(m,Math.hypot(a[0]+t*dx-p[0],a[1]+t*dy-p[1]));}return m;}
+const dist=(a,b,c,d)=>{const p=xy(a,b),q=xy(c,d);return Math.hypot(p[0]-q[0],p[1]-q[1])};
+
+/* ---------- carte ---------- */
+const map=L.map('map',{zoomControl:false,preferCanvas:true,maxZoom:20}).fitBounds(L.latLngBounds(POLY),{padding:[4,4]});
+const cv=L.canvas({padding:.5});
+let tiles=null;
+const isDark=matchMedia('(prefers-color-scheme:dark)').matches;
+D.roads.forEach(r=>L.polyline(r.p,{renderer:cv,interactive:false,color:r.k==='rail'?'#555':(isDark?'#6b5f5a':'#c9bfb9'),weight:r.k==='rail'?2:(r.k==='main'?6:4),dashArray:r.k==='rail'?'6 4':null}).addTo(map));
+D.blds.forEach(b=>L.polygon(b,{renderer:cv,interactive:false,stroke:false,fillColor:isDark?'#4a4441':'#a59c97',fillOpacity:.8}).addTo(map));
+L.polygon(POLY,{renderer:cv,interactive:false,color:'#b3261e',weight:3,fill:false}).addTo(map);
+// étiquettes de rues (zoom ≥ 17)
+const mk={};const lblLayer=L.layerGroup(); const seen={};
+const placed=[];D.roads.filter(r=>r.n&&r.k!=='rail').forEach(r=>{const m=r.p[Math.floor(r.p.length/2)];
+  if(placed.some(q=>q[0]===r.n&&dist(q[1],q[2],m[0],m[1])<120))return;placed.push([r.n,m[0],m[1]]);
+  L.marker(m,{interactive:false,keyboard:false,icon:L.divIcon({className:'lbl',html:esc(r.n),iconSize:null})}).addTo(lblLayer)});
+function lblToggle(){map.getZoom()>=17?lblLayer.addTo(map):lblLayer.remove();stops().forEach(p=>mk[p.id]&&drawStop(p))} map.on('zoomend',lblToggle);lblToggle();
+function drawStop(p){const st=status(p);const big=map.getZoom()>=17;const o={renderer:cv,radius:big?(p.lg>3?8:5.5):(p.lg>3?5:3.5),weight:big?2:1,color:'#fff',fillColor:COL[st],fillOpacity:1};
+  if(mk[p.id]){mk[p.id].setStyle(o);return}
+  mk[p.id]=L.circleMarker([p.la,p.lo],o).addTo(map).on('click',()=>openSheet(p.id));}
+stops().forEach(drawStop);
+$('#bTiles').onclick=()=>{if(tiles){tiles.remove();tiles=null;$('#bTiles').classList.remove('on')}else{
+  tiles=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:20,maxNativeZoom:19,attribution:'© OpenStreetMap',opacity:.85}).addTo(map);tiles.bringToBack();$('#bTiles').classList.add('on')}};
+
+/* ---------- GPS ---------- */
+let me=null,meMk=null,meAcc=null,watch=null,wasIn=null,follow=true,wake=null;
+function gpsUI(){const g=$('#gps');g.className='';if(!me)return;
+  const ins=inside(me.la,me.lo), d=Math.round(edgeDist(me.la,me.lo)), acc=Math.round(me.acc);
+  g.classList.add(ins?'in':'out');
+  $('#gpsT').textContent=ins?'DANS LE SECTEUR 220':'HORS SECTEUR';
+  $('#gpsS').textContent=(ins?'Limite à '+d+' m':'Secteur à '+d+' m')+' · précision ±'+acc+' m';
+  if(wasIn===true&&!ins&&navigator.vibrate)navigator.vibrate([300,150,300]);
+  if(wasIn!==ins&&wasIn!==null)toast(ins?'Retour dans le secteur':'Vous sortez du secteur 220 !');
+  wasIn=ins;}
+function startGps(){if(!navigator.geolocation){toast('GPS non disponible sur ce navigateur');return}
+  if(watch!==null){navigator.geolocation.clearWatch(watch);watch=null;me=null;$('#gps').className='';$('#gpsT').textContent='GPS en pause';$('#gpsS').textContent='Touchez « Activer » pour reprendre';$('#gpsBtn').textContent='Activer';if(meMk){meMk.remove();meAcc.remove();meMk=null}releaseWake();return}
+  $('#gpsT').textContent='Recherche du GPS…';$('#gpsS').textContent='Autorisez la localisation si demandé';$('#gpsBtn').textContent='Pause';
+  watch=navigator.geolocation.watchPosition(pos=>{me={la:pos.coords.latitude,lo:pos.coords.longitude,acc:pos.coords.accuracy};
+    if(!meMk){meAcc=L.circle([me.la,me.lo],{radius:me.acc,color:'#2563eb',weight:1,fillOpacity:.12,interactive:false}).addTo(map);
+      meMk=L.circleMarker([me.la,me.lo],{radius:8,color:'#fff',weight:3,fillColor:'#2563eb',fillOpacity:1,interactive:false}).addTo(map);map.setView([me.la,me.lo],18)}
+    else{meMk.setLatLng([me.la,me.lo]);meAcc.setLatLng([me.la,me.lo]).setRadius(me.acc);if(follow&&!$('#vMap').hidden)map.panTo([me.la,me.lo],{animate:false})}
+    gpsUI(); if(curF==='near'&&!$('#vList').hidden)renderList();
+  },err=>{$('#gpsT').textContent='GPS indisponible';$('#gpsS').textContent=err.code===1?'Localisation refusée : autorisez-la dans le navigateur':'Signal faible, réessayez à découvert';},
+  {enableHighAccuracy:true,maximumAge:3000,timeout:20000});
+  keepAwake();}
+async function keepAwake(){try{wake=await navigator.wakeLock.request('screen')}catch(e){}}
+function releaseWake(){try{wake&&wake.release();wake=null}catch(e){}}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&watch!==null)keepAwake()});
+$('#gpsBtn').onclick=startGps;
+map.on('dragstart',()=>follow=false);
+$('#bLocate').onclick=()=>{if(!me){startGps();return}follow=true;map.setView([me.la,me.lo],Math.max(map.getZoom(),18))};
+function nearest(n,filter){if(!me)return[];return stops().filter(filter||(()=>true)).map(p=>[dist(me.la,me.lo,p.la,p.lo),p]).sort((a,b)=>a[0]-b[0]).slice(0,n)}
+$('#bNear').onclick=()=>{if(!me){toast('Activez le GPS d\'abord');return}const r=nearest(1,p=>['todo','absent','part'].includes(status(p)));if(r[0]){map.setView([r[0][1].la,r[0][1].lo],19);openSheet(r[0][1].id)}};
+$('#bAdd').onclick=()=>{const c=me?[me.la,me.lo]:[map.getCenter().lat,map.getCenter().lng];
+  const id='x'+Date.now().toString(36)+S.dev;const p={id,z:zoneOf(c[0],c[1]),s:'Point ajouté',n:'',r:'',lg:1,nb:1,la:+c[0].toFixed(6),lo:+c[1].toFixed(6),ex:1,t:Date.now()};
+  S.extra.push(p);save();drawStop(p);openSheet(id);$('#iName').focus();toast(me?'Point ajouté à votre position':'Point ajouté au centre de la carte')};
+function zoneOf(la,lo){let b=1,m=1e9;D.stops.forEach(p=>{const d=dist(la,lo,p.la,p.lo);if(d<m){m=d;b=p.z}});return b}
+
+/* ---------- fiche ---------- */
+let cur=null;
+function openSheet(id){cur=stops().find(p=>p.id===id);if(!cur)return;const r=rec(id);
+  $('#shT').textContent=label(cur);
+  const bits=[ZN[cur.z]||('Zone '+cur.z)];if(cur.r)bits.unshift(cur.r);
+  bits.push(cur.lg>1?('≈ '+cur.lg+' logements'):'Maison / 1 logement');
+  if(me)bits.push(Math.round(dist(me.la,me.lo,cur.la,cur.lo))+' m');
+  $('#shS').textContent=bits.join(' · ');
+  $('#fldLog').hidden=!(cur.lg>1);
+  $('#fldName').hidden=!cur.ex; if(cur.ex)$('#iName').value=cur.s==='Point ajouté'?'':cur.s;
+  fillSheet();$('#sheet').classList.add('open');}
+function fillSheet(){const r=rec(cur.id);
+  $$('.stbtns button').forEach(b=>b.setAttribute('aria-pressed',r.st===b.dataset.st));
+  $('#oLf').textContent=(r.lf||0)+' / '+cur.lg;$('#oCal').textContent=r.cal||0;$('#iEur').value=r.eur||'';$('#iNote').value=r.note||'';
+  $$('#segPay button').forEach(b=>b.setAttribute('aria-pressed',r.pay===b.dataset.p));}
+function upd(ch){const r=Object.assign({},rec(cur.id),ch,{t:Date.now(),by:S.dev});S.v[cur.id]=r;save();drawStop(cur);fillSheet();kpi();}
+$$('.stbtns button').forEach(b=>b.onclick=()=>{const st=b.dataset.st,r=rec(cur.id),ch={st:r.st===st?'':st};
+  if(st==='done'&&r.st!=='done'&&cur.lg===1){if(!r.cal)ch.cal=1;ch.lf=1}
+  upd(ch); if(ch.st==='done'&&cur.lg===1)setTimeout(()=>closeSheet(),350)});
+$$('[data-inc]').forEach(b=>b.onclick=()=>{const k=b.dataset.inc,r=rec(cur.id);let v=(r[k]||0)+(+b.dataset.d);v=Math.max(0,k==='lf'?Math.min(cur.lg,v):v);
+  const ch={[k]:v};if(k==='lf'&&cur.lg>1)ch.st=v>=cur.lg?'done':(r.st==='done'?'':r.st);upd(ch)});
+$('#iEur').oninput=e=>upd({eur:Math.max(0,parseFloat(e.target.value.replace(',','.'))||0)});
+$$('[data-add]').forEach(b=>b.onclick=()=>{const r=rec(cur.id);upd({eur:(r.eur||0)+(+b.dataset.add),pay:r.pay||'esp'})});
+$$('#segPay button').forEach(b=>b.onclick=()=>upd({pay:b.dataset.p}));
+$('#iNote').onchange=e=>upd({note:e.target.value});
+$('#iName').onchange=e=>{cur.s=e.target.value||'Point ajouté';cur.t=Date.now();save();openSheet(cur.id)};
+$('#shReset').onclick=()=>{delete S.v[cur.id];S.v[cur.id]={t:Date.now(),by:S.dev};save();drawStop(cur);fillSheet();kpi()};
+function closeSheet(){$('#sheet').classList.remove('open');cur=null;if(!$('#vList').hidden)renderList();if(!$('#vStats').hidden)renderStats()}
+$('#shClose').onclick=closeSheet;
+map.on('click',()=>{if(cur)closeSheet()});
+
+/* ---------- compteurs ---------- */
+function totals(list){let a=0,ad=0,lg=0,lf=0,cal=0,eur=0,esp=0,chq=0,cb=0,again=0;
+  list.forEach(p=>{const r=rec(p.id),st=status(p);a++;lg+=p.lg;if(['done','refus','skip'].includes(st))ad++;if(st==='absent')again++;
+    lf+=st==='done'?Math.max(r.lf||0,p.lg===1?1:0):(r.lf||0);cal+=r.cal||0;eur+=r.eur||0;
+    if(r.eur){if(r.pay==='chq')chq+=r.eur;else if(r.pay==='cb')cb+=r.eur;else esp+=r.eur}});
+  return{a,ad,lg,lf,cal,eur,esp,chq,cb,again}}
+function kpi(){const t=totals(stops());$('#kAddr').textContent=t.ad+'/'+t.a;$('#kLog').textContent=t.lf+'/'+t.lg;
+  $('#kCal').textContent=S.recu?(t.cal+'/'+S.recu):t.cal;$('#kEur').textContent=fmtE(t.eur);}
+
+/* ---------- liste ---------- */
+let curF='todo';
+$('#fZone').innerHTML='<option value="">Toutes les zones</option>'+Object.entries(ZN).map(([k,v])=>`<option value="${k}">${v}</option>`).join('');
+try{$('#fZone').value=localStorage.getItem(KEY+'z')||''}catch(e){}
+$$('#fSt button').forEach(b=>b.onclick=()=>{curF=b.dataset.f;$$('#fSt button').forEach(x=>x.setAttribute('aria-pressed',x===b));if(curF==='near'&&!me)startGps();renderList()});
+$('#fZone').onchange=()=>{try{localStorage.setItem(KEY+'z',$('#fZone').value)}catch(e){}renderList()};
+$('#fQ').oninput=renderList;
+const STL={todo:'À faire',done:'Fait',absent:'Repasser',refus:'Refus',skip:'Inaccessible',part:'En cours'};
+function itemHtml(p,extra){const r=rec(p.id),st=status(p);
+  return `<button class="item st-${st}" data-id="${p.id}"><span class="d" style="background:${COL[st]}"></span><span class="m"><b>${esc(label(p))}</b><small>${esc([p.r,p.lg>1?'≈'+p.lg+' logements':'',r.note||'',extra||''].filter(Boolean).join(' · '))}</small></span><span class="r"><b>${r.eur?fmtE(r.eur):''}</b><br>${STL[st]}${p.lg>1&&r.lf?' '+r.lf+'/'+p.lg:''}</span></button>`}
+function renderList(){const z=$('#fZone').value,q=$('#fQ').value.trim().toLowerCase();
+  let L2=stops().filter(p=>(!z||p.z==z)&&(!q||(label(p)+' '+p.r).toLowerCase().includes(q)));
+  const f={todo:p=>['todo','part','absent'].includes(status(p)),again:p=>status(p)==='absent',done:p=>['done','refus','skip'].includes(status(p)),all:()=>true,near:p=>['todo','part','absent'].includes(status(p))}[curF];
+  L2=L2.filter(f);let h='';
+  if(curF==='near'){if(!me){$('#list').innerHTML='<p class="muted">Activation du GPS…</p>';return}
+    h=L2.map(p=>[dist(me.la,me.lo,p.la,p.lo),p]).sort((a,b)=>a[0]-b[0]).slice(0,25).map(([d,p])=>itemHtml(p,Math.round(d)+' m')).join('');}
+  else{let lz=null,ls=null;L2.forEach(p=>{if(p.z!==lz){const t=totals(stops().filter(x=>x.z===p.z));h+=`<h2 class="zone">${esc(ZN[p.z]||'Zone '+p.z)} <small>${t.ad}/${t.a} faits</small></h2>`;lz=p.z;ls=null}
+    if(p.s!==ls){const ss=stops().filter(x=>x.z===p.z&&x.s===p.s);const t=totals(ss);h+=`<h3 class="street"><span>${esc(p.s)}</span><span>${t.ad}/${t.a}</span></h3>`;ls=p.s}
+    h+=itemHtml(p)});}
+  $('#list').innerHTML=h||'<p class="muted">Rien à afficher avec ces filtres. Bravo si c\'est fini !</p>';}
+$('#list').onclick=e=>{const b=e.target.closest('.item');if(b)openSheet(b.dataset.id)};
+
+/* ---------- bilan & binôme ---------- */
+function renderStats(){const t=totals(stops());
+  const zr=Object.keys(ZN).map(z=>{const x=totals(stops().filter(p=>p.z==z));return`<tr><td>Zone ${z}<div class="bar"><i style="width:${x.a?Math.round(100*x.ad/x.a):0}%"></i></div></td><td>${x.ad}/${x.a}</td><td>${x.lf}/${x.lg}</td><td>${x.again}</td><td>${fmtE(x.eur)}</td></tr>`}).join('');
+  $('#stats').innerHTML=`
+  <div class="card"><h2>Bilan secteur 220</h2><div class="grid2">
+    <div class="stat"><b>${fmtE(t.eur)}</b><span>Collecté</span></div>
+    <div class="stat"><b>${t.cal}${S.recu?' / '+S.recu:''}</b><span>Calendriers donnés${S.recu?' · reste '+(S.recu-t.cal):''}</span></div>
+    <div class="stat"><b>${fmtE(t.esp)}</b><span>Espèces</span></div>
+    <div class="stat"><b>${fmtE(t.chq)}</b><span>Chèques${t.cb?' · autre '+fmtE(t.cb):''}</span></div>
+    <div class="stat"><b>${t.ad} / ${t.a}</b><span>Adresses traitées</span></div>
+    <div class="stat"><b>${t.again}</b><span>À repasser</span></div>
+  </div>
+  <div class="field" style="margin-top:10px"><label for="iRecu">Calendriers reçus</label><div class="step"><input id="iRecu" type="number" inputmode="numeric" min="0" value="${S.recu||''}"></div></div>
+  ${t.cal?`<p class="muted">Moyenne : ${fmtE(t.eur/t.cal)} par calendrier.</p>`:''}</div>
+  <div class="card"><h2>Par zone</h2><div style="overflow-x:auto"><table><tr><th>Zone</th><th>Adr.</th><th>Logts</th><th>Rep.</th><th>€</th></tr>${zr}</table></div>
+  <p class="muted">${Object.entries(ZN).map(([k,v])=>v).join('<br>')}</p></div>
+  <div class="card"><h2>Partager avec le binôme</h2>
+    <p class="muted">Chacun note sur son téléphone. Pour fusionner : l'un envoie son code (WhatsApp, SMS…), l'autre le colle ici. La saisie la plus récente gagne, rien n'est perdu.</p>
+    <div class="stack"><button class="btn primary block" id="bExp">Envoyer mon suivi</button>
+    <textarea id="iImp" placeholder="Collez ici le code reçu du binôme"></textarea>
+    <button class="btn block" id="bImp">Fusionner le code collé</button></div></div>
+  <div class="card"><h2>Organisation conseillée</h2><ol class="tips">
+    <li>Une zone par sortie (1 h 30 à 2 h). Faites les zones 1 à 5 dans l'ordre, la liste suit les rues dans le sens de la numérotation.</li>
+    <li>Meilleurs créneaux : samedi 10 h–12 h et en semaine 17 h 30–19 h 30.</li>
+    <li>Un trottoir chacun dans les rues (numéros pairs / impairs), ensemble dans les résidences.</li>
+    <li>Absent : bouton orange. Laissez un avis de passage, puis filtre « À repasser » en fin de tournée.</li>
+    <li>Le soir : « Envoyer mon suivi » au binôme et vérifiez caisse = total affiché.</li>
+  </ol></div>
+  <div class="card"><h2>Données</h2><p class="muted">Adresses : Base Adresse Nationale. Bâtiments et nombre de logements : IGN BD TOPO (fichiers fonciers). Rues : OpenStreetMap. Contour reporté depuis la fiche secteur, précision ≈ 10 m. Les « bât. sans n° » sont des maisons sans adresse officielle : notez le n° vu sur place dans la note.</p>
+  <button class="btn block" id="bWipe">Tout effacer sur ce téléphone</button></div>`;
+  $('#iRecu').onchange=e=>{S.recu=parseInt(e.target.value)||0;save();kpi();renderStats()};
+  $('#bExp').onclick=exportCode;$('#bImp').onclick=importCode;
+  $('#bWipe').onclick=()=>ask('Tout effacer ?','Le suivi de ce téléphone sera supprimé. Envoyez d\'abord votre suivi au binôme si besoin.',()=>{S.v={};S.extra=[];S.recu=0;save();Object.values(mk).forEach(m=>m.remove());for(const k in mk)delete mk[k];stops().forEach(drawStop);kpi();renderStats()});}
+function b64(s){return btoa(unescape(encodeURIComponent(s)))} function ub64(s){return decodeURIComponent(escape(atob(s)))}
+async function exportCode(){const code='S220:'+b64(JSON.stringify({v:S.v,extra:S.extra,recu:S.recu}));
+  const text='Suivi calendriers secteur 220 – à coller dans l\'appli (Bilan > Fusionner) :\n'+code;
+  try{if(navigator.share){await navigator.share({text});return}}catch(e){if(e.name==='AbortError')return}
+  try{await navigator.clipboard.writeText(text);toast('Code copié, collez-le dans un message')}catch(e){$('#iImp').value=code;$('#iImp').select();toast('Copiez le code sélectionné')}}
+function importCode(){const raw=$('#iImp').value;const m=raw.match(/S220:([A-Za-z0-9+/=]+)/);if(!m){toast('Code non reconnu');return}
+  let o;try{o=JSON.parse(ub64(m[1]))}catch(e){toast('Code abîmé, renvoyez-le');return}
+  let n=0;for(const[id,r] of Object.entries(o.v||{})){if(!S.v[id]||(r.t||0)>(S.v[id].t||0)){S.v[id]=r;n++}}
+  (o.extra||[]).forEach(p=>{const ex=S.extra.find(x=>x.id===p.id);if(!ex){S.extra.push(p);n++}else if((p.t||0)>(ex.t||0))Object.assign(ex,p)});
+  if(!S.recu&&o.recu)S.recu=o.recu;save();stops().forEach(drawStop);kpi();renderStats();toast(n+' mise(s) à jour fusionnée(s)');}
+
+/* ---------- divers ---------- */
+let tt;function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('show'),2600)}
+function ask(t,p,yes){$('#cfT').textContent=t;$('#cfP').textContent=p;$('#confirm').hidden=false;$('#cfNo').onclick=()=>$('#confirm').hidden=true;$('#cfYes').onclick=()=>{$('#confirm').hidden=true;yes()}}
+$$('nav button').forEach(b=>b.onclick=()=>{$$('nav button').forEach(x=>x.setAttribute('aria-selected',x===b));$$('.view').forEach(v=>v.hidden=v.id!==b.dataset.v);
+  if(b.dataset.v==='vMap')map.invalidateSize();if(b.dataset.v==='vList')renderList();if(b.dataset.v==='vStats')renderStats()});
+kpi();
+if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{});
+})();
+</script>
+</body>
+</html>
