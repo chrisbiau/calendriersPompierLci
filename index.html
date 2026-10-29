@@ -60,6 +60,7 @@ main{flex:1;position:relative;min-height:0}
 .mapbtns{position:absolute;right:max(10px,env(safe-area-inset-right,0px));bottom:12px;z-index:500;display:flex;flex-direction:column;gap:8px}
 .fab{width:48px;height:48px;border-radius:14px;border:1px solid var(--line);background:var(--panel);font-size:20px;box-shadow:0 2px 8px #0003;display:grid;place-items:center}
 .fab.on{background:var(--red);color:var(--red-ink);border-color:var(--red)}
+.zlbl{margin:-13px 0 0 -30px;background:var(--panel);color:var(--fg);border:2px solid var(--fg);border-radius:999px;padding:2px 9px;font-size:13px;font-weight:800;white-space:nowrap;pointer-events:none;box-shadow:0 1px 4px #0003}
 .lbl{font-size:11px;font-weight:700;color:#1e3a8a;transform-origin:0 0;margin:-7px 0 0 -40px;white-space:nowrap;text-shadow:0 0 3px #fff,0 0 3px #fff;pointer-events:none}
 .legend{position:absolute;left:max(10px,env(safe-area-inset-left,0px));bottom:12px;z-index:500;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px 8px;font-size:11px;display:grid;grid-template-columns:auto auto;gap:2px 10px}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:-1px}
@@ -177,6 +178,7 @@ nav button[aria-selected=true]{color:var(--red)}
       <button class="fab" id="bLocate" title="Centrer sur moi" aria-label="Centrer sur moi">◎</button>
       <button class="fab" id="bNear" title="Adresse la plus proche" aria-label="Ouvrir l'adresse la plus proche">⌖</button>
       <button class="fab" id="bAdd" title="Ajouter un point ici" aria-label="Ajouter un point">＋</button>
+      <button class="fab on" id="bZones" title="Afficher / masquer les zones" aria-label="Afficher ou masquer les zones" aria-pressed="true" style="font-size:15px;font-weight:800">Z</button>
       <button class="fab" id="bTiles" title="Fond de carte en ligne" aria-label="Fond de carte détaillé (en ligne)">🗺</button>
     </div>
   </section>
@@ -254,6 +256,7 @@ nav button[aria-selected=true]{color:var(--red)}
     <li><b>Touchez un point</b> (ou juste à côté) pour ouvrir sa fiche. Zoomez pour séparer les points serrés.</li>
     <li>Couleurs : <i class="c" style="background:#8a8380"></i>à faire · <i class="c" style="background:#1f8a4c"></i>fait · <i class="c" style="background:#d97706"></i>repasser · <i class="c" style="background:#2563eb"></i>immeuble en cours · <i class="c" style="background:#c0262d"></i>refus · <i class="c" style="background:#7c3aed"></i>inaccessible.</li>
     <li>Les gros points sont des immeubles ou résidences (plusieurs logements).</li>
+    <li>Les <b>zones 1 à 5</b> sont délimitées en tirets avec une teinte légère. Le bouton <b>Z</b> les affiche ou les masque.</li>
     <li>◎ recentre sur vous · ⌖ ouvre l'adresse non faite la plus proche · ＋ ajoute un point oublié à votre position · 🗺 affiche le fond de carte détaillé (réseau nécessaire).</li>
     <li>Onglet <b>Adresses</b> : la liste par zone et par rue, avec les filtres « À faire », « À repasser », « Près de moi ».</li>
   </ul>
@@ -331,6 +334,12 @@ let tiles=null;
 const isDark=matchMedia('(prefers-color-scheme:dark)').matches;
 D.roads.forEach(r=>L.polyline(r.p,{renderer:cv,interactive:false,color:r.k==='rail'?'#555':(isDark?'#6b5f5a':'#c9bfb9'),weight:r.k==='rail'?2:(r.k==='main'?6:4),dashArray:r.k==='rail'?'6 4':null}).addTo(map));
 D.blds.forEach(b=>L.polygon(b,{renderer:cv,interactive:false,stroke:false,fillColor:isDark?'#4a4441':'#a59c97',fillOpacity:.8}).addTo(map));
+// découpage en zones : teinte légère + limite en tirets + étiquette « Zone n »
+const ZCOL={1:'#16a34a',2:'#0284c7',3:'#ca8a04',4:'#9333ea',5:'#0d9488'};
+const zoneLayer=L.layerGroup().addTo(map);
+Object.entries(D.zones||{}).forEach(([z,parts])=>{parts.forEach(pt=>{
+  if(Array.isArray(pt))L.polygon(pt,{renderer:cv,interactive:false,color:isDark?'#cbd5e1':'#334155',weight:2,dashArray:'7 6',fillColor:ZCOL[z],fillOpacity:.13}).addTo(zoneLayer);
+  else L.marker(pt.c,{interactive:false,keyboard:false,icon:L.divIcon({className:'zlbl',html:'Zone '+z,iconSize:null})}).addTo(zoneLayer)})});
 L.polygon(POLY,{renderer:cv,interactive:false,color:'#b3261e',weight:3,fill:false}).addTo(map);
 // étiquettes de rues (zoom ≥ 17)
 const mk={};const lblLayer=L.layerGroup(); const seen={};
@@ -342,6 +351,7 @@ function drawStop(p){const st=status(p);const big=map.getZoom()>=17;const o={ren
   if(mk[p.id]){mk[p.id].setStyle(o);return}
   mk[p.id]=L.circleMarker([p.la,p.lo],Object.assign(o,{interactive:false})).addTo(map);}
 stops().forEach(drawStop);
+$('#bZones').onclick=()=>{const on=map.hasLayer(zoneLayer);on?zoneLayer.remove():zoneLayer.addTo(map);$('#bZones').classList.toggle('on',!on);$('#bZones').setAttribute('aria-pressed',!on)};
 $('#bTiles').onclick=()=>{if(tiles){tiles.remove();tiles=null;$('#bTiles').classList.remove('on')}else{
   tiles=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:20,maxNativeZoom:19,attribution:'© OpenStreetMap',opacity:.85}).addTo(map);tiles.bringToBack();$('#bTiles').classList.add('on')}};
 
